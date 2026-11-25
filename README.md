@@ -4,7 +4,7 @@
 
 ## Démarrage rapide
 
-1. Télécharge `ORION_DevOps_Lab.html`.
+1. Télécharge [`index.html`](./index.html).
 2. Ouvre-le dans un navigateur récent (Chrome, Firefox, Edge, Safari).
 3. C'est tout. Une connexion Internet sert uniquement à charger les polices Google Fonts (le site reste utilisable sans, avec des polices de secours).
 
