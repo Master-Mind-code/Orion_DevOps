@@ -45,6 +45,13 @@ p{margin:0}
 .side-prog{padding:10px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel)}
 .side-prog .row{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted)}
 .nav-g{font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);padding:10px 8px 4px}
+.nav-tools{display:grid;gap:8px;padding:4px 2px}
+.nav-tools input,.nav-tools select{font-size:.82rem}
+.nav-g-label{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.nav-g-pct{font-family:var(--f-mono);font-size:.65rem;letter-spacing:0;color:var(--muted);white-space:nowrap}
+.nav-g .meter{height:4px;margin:4px 0 0;border:0}
+.nav-g .meter>i{background:var(--docker)}
+.nav-empty{padding:10px 8px;color:var(--muted);font-size:.82rem}
 .nav a{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;color:var(--muted);text-decoration:none;font-size:.88rem}
 .nav a:hover{background:var(--panel);color:var(--fg)}
 .nav a.on{background:linear-gradient(90deg,rgba(36,150,237,.22),rgba(36,150,237,.04));color:#fff}
@@ -277,6 +284,10 @@ label.chk input{margin-top:4px;accent-color:var(--docker)}
 .mod-tile:hover{border-color:var(--docker)}
 .mod-tile .s{font-size:.7rem;font-family:var(--f-mono);color:var(--dim)}
 .mod-tile.d .s{color:var(--ok)}.mod-tile.v .s{color:var(--docker)}
+.section-progress{display:grid;gap:6px}
+.section-progress .row{font-size:.82rem}
+.section-progress .meter{height:6px}
+.resume-link{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:none}
 
 /* containers visual */
 .boxes{display:flex;gap:10px;flex-wrap:wrap}
@@ -318,12 +329,24 @@ label.chk input{margin-top:4px;accent-color:var(--docker)}
       <div><b>ORION LAB</b><span>Docker &amp; DevOps Engineering</span></div>
     </div>
     <div class="side-prog"><div class="row"><span id="side-done">0/25 modules</span><span id="side-pct" class="tnum">0 %</span></div><div class="meter" style="margin-top:6px"><i id="side-bar" style="width:0"></i></div></div>
-    <nav class="nav" id="nav"></nav>
+    <div class="nav-tools">
+      <label class="small muted" for="module-search">Recherche globale</label>
+      <input id="module-search" type="search" placeholder="Modules, notions, commandes…" autocomplete="off">
+      <label class="small muted" for="module-filter">Filtrer les modules</label>
+      <select id="module-filter">
+        <option value="all">Tous les modules</option>
+        <option value="todo">À faire</option>
+        <option value="visited">Déjà consulté</option>
+        <option value="done">Terminé</option>
+      </select>
+    </div>
+    <nav class="nav" id="nav" aria-label="Résultats de recherche et modules"></nav>
   </aside>
   <div class="main">
     <div class="top">
       <button class="btn sm menu-btn" id="menu-btn" type="button" aria-label="Ouvrir le menu">☰ Modules</button>
       <div class="crumb" id="crumb">ORION LAB</div>
+      <a class="btn sm resume-link" id="resume-link" href="#dashboard" hidden></a>
       <div class="sp"></div>
       <a class="lvl-pill" href="#dashboard" style="color:inherit;text-decoration:none"><i id="lvl-i">1</i><span class="t" id="lvl-t">Beginner</span></a>
     </div>
@@ -1844,14 +1867,46 @@ function mountFoot(id,root){
 }
 
 /* ---------- Navigation ---------- */
+const MODULE_SEARCH_INDEX={};
+const normalizeSearch=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+function moduleSearchText(m){
+  if(!MODULE_SEARCH_INDEX[m.id]){
+    const holder=document.createElement('div');
+    holder.innerHTML=VIEWS[m.id].html();
+    MODULE_SEARCH_INDEX[m.id]=normalizeSearch(`${m.t} ${m.g} ${holder.textContent}`);
+  }
+  return MODULE_SEARCH_INDEX[m.id];
+}
 function renderNav(){
-  const cur=(location.hash.slice(1)||'dashboard');let g='';let html='';
-  MODULES.forEach((m,i)=>{if(m.g!==g){g=m.g;html+=`<div class="nav-g">${esc(g)}</div>`}const st=Store.d.done[m.id]?'d':Store.d.visited[m.id]?'v':'';
-    html+=`<a href="#${m.id}" class="${m.id===cur?'on':''}" ${m.id===cur?'aria-current="page"':''}><span class="num">${i?String(i).padStart(2,'0'):'··'}</span><span class="dot ${st}"></span><span>${esc(m.t)}</span></a>`});
-  $('#nav').innerHTML=html;
+  const cur=(location.hash.slice(1)||'dashboard');
+  const query=normalizeSearch(($('#module-search').value||'').trim()).split(/\s+/).filter(Boolean);
+  const filter=$('#module-filter').value;
+  const matches=MODULES.filter(m=>{
+    const done=!!Store.d.done[m.id],visited=!!Store.d.visited[m.id];
+    const statusMatch=m.id==='dashboard'?filter==='all':filter==='all'||(filter==='todo'?!done:filter==='visited'?visited:done);
+    return statusMatch&&(!query.length||query.every(term=>moduleSearchText(m).includes(term)));
+  });
+  let g='';let html='';
+  matches.forEach(m=>{
+    if(m.g!==g){
+      g=m.g;
+      const section=MODULES.filter(x=>x.g===g&&x.id!=='dashboard');
+      if(section.length){
+        const done=section.filter(x=>Store.d.done[x.id]).length;
+        const pct=Math.round(done/section.length*100);
+        html+=`<div class="nav-g"><div class="nav-g-label"><span>${esc(g)}</span><span class="nav-g-pct">${pct}%</span></div><div class="meter" aria-label="${pct} % terminé"><i style="width:${pct}%"></i></div></div>`;
+      }else html+=`<div class="nav-g">${esc(g)}</div>`;
+    }
+    const i=MODULES.indexOf(m);const st=Store.d.done[m.id]?'d':Store.d.visited[m.id]?'v':'';
+    html+=`<a href="#${m.id}" class="${m.id===cur?'on':''}" ${m.id===cur?'aria-current="page"':''}><span class="num">${i?String(i).padStart(2,'0'):'··'}</span><span class="dot ${st}"></span><span>${esc(m.t)}</span></a>`;
+  });
+  $('#nav').innerHTML=html||'<div class="nav-empty">Aucun module ne correspond à ces critères.</div>';
   const done=Object.keys(Store.d.done).filter(k=>k!=='dashboard').length;const pct=Math.round(done/(MODULES.length-1)*100);
   $('#side-pct').textContent=pct+' %';$('#side-bar').style.width=pct+'%';$('#side-done').textContent=`${done}/${MODULES.length-1} modules`;
   const L=level();$('#lvl-i').textContent=L.i+1;$('#lvl-t').textContent=L.cur.n;
+  const resume=MODULES.find(m=>m.id===Store.d.lastMod&&m.id!=='dashboard');const link=$('#resume-link');
+  link.hidden=!resume;
+  if(resume){link.href=`#${resume.id}`;link.textContent=`↩ ${resume.t}`;link.setAttribute('aria-label',`Reprendre le module ${resume.t}`);link.title=`Reprendre : ${resume.t}`}
 }
 function render(){
   const id=location.hash.slice(1)||'dashboard';const m=MODULES.find(x=>x.id===id)||MODULES[0];
@@ -1860,7 +1915,7 @@ function render(){
   root.innerHTML=v.html()+footHtml(m.id);
   try{v.mount&&v.mount(root)}catch(e){console.error(e)}
   mountFoot(m.id,root);
-  Store.d.visited[m.id]=1;Store.d.lastMod=m.id;touchDay();
+  Store.d.visited[m.id]=1;if(m.id!=='dashboard')Store.d.lastMod=m.id;touchDay();
   $('#crumb').innerHTML=`ORION LAB <span class="dim">/</span> <b>${esc(m.t)}</b>`;
   renderNav();document.title=`${m.t} · ORION DevOps Lab`;window.scrollTo(0,0);
   $('.side').classList.remove('open');const s=$('.scrim');if(s)s.remove();
@@ -1870,7 +1925,8 @@ function render(){
 VIEWS.dashboard={html(){
   const d=Store.d;const learn=MODULES.slice(1);const done=learn.filter(m=>d.done[m.id]).length;const inprog=learn.filter(m=>d.visited[m.id]&&!d.done[m.id]).length;
   const pct=Math.round(done/learn.length*100);const L=level();const qs=Object.values(d.quiz);const qavg=qs.length?Math.round(qs.reduce((a,b)=>a+b,0)/qs.length):null;
-  const nextM=learn.find(m=>!d.done[m.id]);const mins=Math.round(d.time/60);const last=d.last?new Date(d.last):null;const lastM=MODULES.find(m=>m.id===d.lastMod);
+  const sections=[...new Set(learn.map(m=>m.g))].map(g=>{const modules=learn.filter(m=>m.g===g);const completed=modules.filter(m=>d.done[m.id]).length;return{g,completed,total:modules.length,pct:Math.round(completed/modules.length*100)}});
+  const nextM=learn.find(m=>!d.done[m.id]);const mins=Math.round(d.time/60);const last=d.last?new Date(d.last):null;const lastM=MODULES.find(m=>m.id===d.lastMod&&m.id!=='dashboard');
   const C=2*Math.PI*52;const gaps=Object.entries(d.gaps).sort((a,b)=>b[1]-a[1]).slice(0,4);
   return `<header class="mhead" style="gap:14px">
    <div class="eyebrow">ORION · Laboratoire d'ingénierie</div>
@@ -1896,6 +1952,7 @@ VIEWS.dashboard={html(){
   </section>
   ${sec('Niveaux de compétence',`<div class="lvl-track">${LEVELS.map((l,k)=>`<div class="${k<L.i?'got':k===L.i?'cur':''}"><b>${esc(l.n)}</b><br><span class="tnum">${l.xp} XP</span><br>${esc(l.how)}</div>`).join('')}</div>
    <p class="small muted">XP : module terminé +12 · commande réussie +3 · mission +30 · projet validé +40 · niveau de quiz réussi (≥ 70 %) +25 à +55. Les niveaux se débloquent par la pratique, pas par la lecture seule.</p>`)}
+  ${sec('Progression par section',`<div class="grid g3">${sections.map(s=>`<div class="card section-progress"><div class="row between"><b>${esc(s.g)}</b><span class="tnum">${s.pct}%</span></div><div class="meter" role="progressbar" aria-label="Progression ${esc(s.g)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${s.pct}"><i style="width:${s.pct}%"></i></div><span class="small muted">${s.completed}/${s.total} modules terminés</span></div>`).join('')}</div>`)}
   ${sec('Parcours',`<div class="mod-tiles">${learn.map((m,i)=>{const st=d.done[m.id]?'d':d.visited[m.id]?'v':'';return`<a class="mod-tile ${st}" href="#${m.id}"><span class="s">${String(i+1).padStart(2,'0')} · ${st==='d'?'TERMINÉ':st==='v'?'EN COURS':'À FAIRE'}</span><span>${esc(m.t)}</span></a>`}).join('')}</div>`)}
   <section class="grid g2">
    <div class="card"><h3>Historique des quiz</h3>${d.qhist.length?`<div class="tbl" style="margin-top:8px"><table style="min-width:0"><tr><th>Date</th><th>Niveau</th><th>Score</th></tr>${d.qhist.slice(-6).reverse().map(h=>`<tr><td>${new Date(h.at).toLocaleDateString('fr-FR')}</td><td>${esc(QUIZ[h.lvl].t)}</td><td class="tnum">${h.pct} %</td></tr>`).join('')}</table></div>`:'<p class="muted small">Aucun quiz passé. <a href="#quiz">Commencer par le niveau Beginner</a>.</p>'}</div>
@@ -2693,6 +2750,8 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-cp]');if(b
 /* ===================== DÉMARRAGE ===================== */
 function boot(){
   $('#menu-btn').onclick=()=>{const s=$('.side');s.classList.add('open');const sc=document.createElement('div');sc.className='scrim';sc.onclick=()=>{s.classList.remove('open');sc.remove()};document.body.appendChild(sc)};
+  $('#module-search').addEventListener('input',renderNav);
+  $('#module-filter').addEventListener('change',renderNav);
   window.addEventListener('hashchange',render);
   setInterval(()=>{if(document.visibilityState==='visible'){Store.d.time+=15;Store.save()}},15000);
   render();
